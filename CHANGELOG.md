@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.1.0](https://github.com/amoshydra/meow-loader/compare/v0.0.1...v0.1.0) (2026-04-19)
+
+
+### Bug Fixes
+
+* improve ffmpeg error handling and add pre-flight check ([0a6c91e](https://github.com/amoshydra/meow-loader/commit/0a6c91e1e385ae3a6245507e35d9a01038a4d2d4))
+
+
+### Reverts
+
+* "chore(main): release 0.1.0" ([adadeb0](https://github.com/amoshydra/meow-loader/commit/adadeb035bb10789160779d7f796240a207d8cd9))
+* "chore(main): release 0.2.0" ([adadeb0](https://github.com/amoshydra/meow-loader/commit/adadeb035bb10789160779d7f796240a207d8cd9))
+* "chore(main): release meow-loader 0.1.0" ([adadeb0](https://github.com/amoshydra/meow-loader/commit/adadeb035bb10789160779d7f796240a207d8cd9))
+* "chore(main): release meow-loader 0.1.1" ([adadeb0](https://github.com/amoshydra/meow-loader/commit/adadeb035bb10789160779d7f796240a207d8cd9))
+
+
+### Miscellaneous Chores
+
+* release 0.1.0 ([1f7a399](https://github.com/amoshydra/meow-loader/commit/1f7a399491ecedb10fb362b82513ff9277868506))
+* release 0.1.0 ([adadeb0](https://github.com/amoshydra/meow-loader/commit/adadeb035bb10789160779d7f796240a207d8cd9))
+* release 0.1.0 ([adadeb0](https://github.com/amoshydra/meow-loader/commit/adadeb035bb10789160779d7f796240a207d8cd9))
+
 ## [0.1.0](https://github.com/amoshydra/meow-loader/compare/v0.1.0...v0.1.0) (2026-04-19)
 
 
