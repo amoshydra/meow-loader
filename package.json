@@ -1,12 +1,21 @@
 {
   "name": "meow-loader",
-  "module": "index.ts",
+  "version": "0.1.0",
+  "description": "Download M3U8/HLS video streams and merge into MP4",
   "type": "module",
-  "private": true,
-  "devDependencies": {
-    "@types/bun": "latest"
+  "bin": {
+    "meow-loader": "./dist/index.js"
   },
-  "peerDependencies": {
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build index.ts --outdir dist --target node --minify",
+    "prepack": "pnpm run build",
+    "start": "node dist/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
     "typescript": "^5"
   }
 }

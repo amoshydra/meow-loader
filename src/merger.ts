@@ -1,4 +1,5 @@
-import { $ } from 'bun';
+import { writeFile, unlink } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 
 export async function mergeToMp4(segments: Uint8Array[], outputPath: string): Promise<void> {
   const tempDir = process.env.TMPDIR || '/tmp';
@@ -11,15 +12,22 @@ export async function mergeToMp4(segments: Uint8Array[], outputPath: string): Pr
     offset += segment.length;
   }
 
-  await Bun.write(inputTs, combined);
+  await writeFile(inputTs, combined);
+
+  const runFfmpeg = (args: string[]): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const proc = spawn('ffmpeg', args, { stdio: 'pipe' });
+      proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited with code ${code}`))));
+      proc.on('error', reject);
+    });
 
   try {
-    await $`ffmpeg -y -i ${inputTs} -c copy -bsf:a aac_adtstoasc ${outputPath}`.quiet();
+    await runFfmpeg(['-y', '-i', inputTs, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', outputPath]);
   } catch {
-    await $`ffmpeg -y -i ${inputTs} -c copy ${outputPath}`.quiet();
+    await runFfmpeg(['-y', '-i', inputTs, '-c', 'copy', outputPath]);
   } finally {
     try {
-      await Bun.$`rm -f ${inputTs}`.quiet();
+      await unlink(inputTs);
     } catch {}
   }
 }
