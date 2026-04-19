@@ -31,8 +31,27 @@ if (playlist.isMaster && playlist.variants) {
     console.log(`  [${i}] ${v.bandwidth / 1000} kbps${res}`);
   });
 
-  const choice = 0;
-  console.log(`Auto-selecting highest bandwidth variant [${choice}]`);
+  let choice: number;
+  if (Bun.argv[4]) {
+    choice = parseInt(Bun.argv[4]);
+    if (isNaN(choice) || choice < 0 || choice >= playlist.variants.length) {
+      console.error(`Invalid variant index. Choose 0-${playlist.variants.length - 1}`);
+      process.exit(1);
+    }
+  } else {
+    const readline = Bun.stdin.stream().getReader();
+    const decoder = new TextDecoder();
+    process.stdout.write(`Select variant (0-${playlist.variants.length - 1}, default: ${playlist.variants.length - 1} highest): `);
+    const { value } = await readline.read();
+    const input = decoder.decode(value).trim();
+    choice = input ? parseInt(input) : playlist.variants.length - 1;
+    if (isNaN(choice) || choice < 0 || choice >= playlist.variants.length) {
+      console.error(`Invalid choice. Defaulting to highest bandwidth.`);
+      choice = playlist.variants.length - 1;
+    }
+  }
+
+  console.log(`Selected variant [${choice}]: ${playlist.variants[choice].resolution || 'unknown'} @ ${playlist.variants[choice].bandwidth / 1000} kbps`);
   playlistUrl = new URL(playlist.variants[choice].uri, url).href;
 
   console.log(`Fetching variant playlist: ${playlistUrl}`);
