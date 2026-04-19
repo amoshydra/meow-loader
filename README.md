@@ -1,10 +1,10 @@
 
 
 <div align="center">
-  <img src="assets/banner.png" alt="meow-loader banner" width="600" />
+  <img src="https://raw.githubusercontent.com/amoshydra/meow-loader/refs/heads/main/assets/banner.png" alt="meow-loader banner" width="600" />
 
-<big><big><big><strong>meow-loader</strong></big></big></big><br />
-<small><i>m3u8 loader</i></small>
+<strong>meow-loader</strong><br />
+<i>m3u8 loader</i>
 <br /><br />
 </div>
 
