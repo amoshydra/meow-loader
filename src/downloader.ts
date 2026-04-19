@@ -64,7 +64,7 @@ async function decryptSegment(
   return new Uint8Array(decrypted);
 }
 
-function resolveUrl(uri: string, baseUrl: string): string {
+export function resolveUrl(uri: string, baseUrl: string): string {
   if (uri.startsWith('http://') || uri.startsWith('https://')) {
     return uri;
   }
