@@ -18,7 +18,13 @@ export async function mergeToMp4(segments: Uint8Array[], outputPath: string): Pr
     new Promise((resolve, reject) => {
       const proc = spawn('ffmpeg', args, { stdio: 'pipe' });
       proc.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited with code ${code}`))));
-      proc.on('error', reject);
+      proc.on('error', (err: NodeJS.ErrnoException) => {
+        if (err.code === 'ENOENT') {
+          reject(new Error('ffmpeg not found. Please install ffmpeg and ensure it is in your PATH.'));
+        } else {
+          reject(err);
+        }
+      });
     });
 
   try {
