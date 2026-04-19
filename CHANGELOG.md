@@ -1,19 +1,5 @@
 # Changelog
 
-## [0.1.1](https://github.com/amoshydra/meow-loader/compare/meow-loader-v0.1.0...meow-loader-v0.1.1) (2026-04-19)
-
-
-### Bug Fixes
-
-* improve ffmpeg error handling and add pre-flight check ([59f66c3](https://github.com/amoshydra/meow-loader/commit/59f66c33a5ee10865c7a18046a03e94c453ccb0b))
-
-
-### CI/CD
-
-* add workflow_dispatch trigger to publish workflow ([bcfecf4](https://github.com/amoshydra/meow-loader/commit/bcfecf49cbb56d16bb984d2e21f53ad5e73a6408))
-* fix publish trigger to match release-please tag pattern ([c837a89](https://github.com/amoshydra/meow-loader/commit/c837a89e835466bb3bb1a512eaa83299d40d0514))
-* trigger publish workflow on git tag push instead of release event ([b71a45f](https://github.com/amoshydra/meow-loader/commit/b71a45f2ef37a2063552d33d087ece50e0492166))
-
 ## [0.1.0](https://github.com/amoshydra/meow-loader/compare/meow-loader-v0.0.1...meow-loader-v0.1.0) (2026-04-19)
 
 
