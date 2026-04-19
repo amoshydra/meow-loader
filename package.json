@@ -1,6 +1,6 @@
 {
   "name": "meow-loader",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Download M3U8/HLS video streams and merge into MP4",
   "homepage": "https://github.com/amoshydra/meow-loader",
   "repository": {
