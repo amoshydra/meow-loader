@@ -1,4 +1,4 @@
-import { M3U8Encryption, M3U8Segment } from './m3u8-parser';
+import type { M3U8Encryption } from './m3u8-parser';
 
 export async function downloadSegment(
   uri: string,
@@ -12,10 +12,11 @@ export async function downloadSegment(
     throw new Error(`Failed to download segment: ${url} (${response.status})`);
   }
 
-  let data = new Uint8Array(await response.arrayBuffer());
+  const buffer = await response.arrayBuffer();
+  const data = new Uint8Array(buffer);
 
   if (encryption && encryption.method === 'AES-128') {
-    data = await decryptSegment(data, encryption, baseUrl);
+    return decryptSegment(data, encryption, baseUrl);
   }
 
   return data;
@@ -33,7 +34,8 @@ async function decryptSegment(
     throw new Error(`Failed to download encryption key: ${keyUrl}`);
   }
 
-  const key = new Uint8Array(await keyResponse.arrayBuffer());
+  const keyBuffer = await keyResponse.arrayBuffer();
+  const key = new Uint8Array(keyBuffer);
 
   let iv: Uint8Array;
   if (encryption.iv) {
@@ -43,18 +45,20 @@ async function decryptSegment(
     iv = new Uint8Array(16);
   }
 
+  const keyData = key.buffer.slice(key.byteOffset, key.byteOffset + key.byteLength) as ArrayBuffer;
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    key,
-    { name: 'AES-CBC', iv },
+    keyData,
+    { name: 'AES-CBC' },
     false,
     ['decrypt'],
   );
 
+  const dataSlice = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-CBC', iv },
+    { name: 'AES-CBC', iv: iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength) as ArrayBuffer },
     cryptoKey,
-    data,
+    dataSlice,
   );
 
   return new Uint8Array(decrypted);

@@ -40,7 +40,7 @@ export function parseM3U8(content: string): M3U8Playlist {
   let encryption: Partial<M3U8Encryption> = {};
 
   for (let i = 1; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
 
     if (line.startsWith('#EXT-X-STREAM-INF') && !playlist.isMaster) {
       playlist.isMaster = true;
@@ -49,7 +49,7 @@ export function parseM3U8(content: string): M3U8Playlist {
     }
 
     if (line.startsWith('#EXT-X-TARGETDURATION:')) {
-      playlist.targetDuration = parseFloat(line.split(':')[1]);
+      playlist.targetDuration = parseFloat(line.split(':')[1]!);
     }
 
     if (line.startsWith('#EXT-X-KEY:')) {
@@ -61,8 +61,8 @@ export function parseM3U8(content: string): M3U8Playlist {
 
     if (line.startsWith('#EXTINF')) {
       const parts = line.split(':');
-      const durationPart = parts[1];
-      const duration = parseFloat(durationPart.split(',')[0]);
+      const durationPart = parts[1]!;
+      const duration = parseFloat(durationPart.split(',')[0]!);
       const title = durationPart.includes(',') ? durationPart.split(',')[1] : undefined;
       currentSegment = { duration, title };
     }
@@ -70,7 +70,7 @@ export function parseM3U8(content: string): M3U8Playlist {
     if (line.startsWith('#')) continue;
 
     if (playlist.isMaster && playlist.variants) {
-      const attrs = parseAttributes(lines[i - 1]);
+      const attrs = parseAttributes(lines[i - 1]!);
       playlist.variants.push({
         bandwidth: parseInt(attrs.BANDWIDTH || '0'),
         resolution: attrs.RESOLUTION,
@@ -93,12 +93,12 @@ export function parseM3U8(content: string): M3U8Playlist {
   return playlist;
 }
 
-function parseAttributes(str: string): Record<string, string> {
-  const attrs: Record<string, string> = {};
+function parseAttributes(str: string): Record<string, string | undefined> {
+  const attrs: Record<string, string | undefined> = {};
   const regex = /([A-Z0-9-]+)=("([^"]*)"|([^,]*))/g;
   let match;
   while ((match = regex.exec(str)) !== null) {
-    attrs[match[1]] = match[3] || match[4];
+    attrs[match[1]!] = match[3] || match[4];
   }
   return attrs;
 }

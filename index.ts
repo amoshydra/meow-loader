@@ -51,8 +51,9 @@ if (playlist.isMaster && playlist.variants) {
     }
   }
 
-  console.log(`Selected variant [${choice}]: ${playlist.variants[choice].resolution || 'unknown'} @ ${playlist.variants[choice].bandwidth / 1000} kbps`);
-  playlistUrl = new URL(playlist.variants[choice].uri, url).href;
+  const selected = playlist.variants[choice]!;
+  console.log(`Selected variant [${choice}]: ${selected.resolution || 'unknown'} @ ${selected.bandwidth / 1000} kbps`);
+  playlistUrl = new URL(selected.uri, url).href;
 
   console.log(`Fetching variant playlist: ${playlistUrl}`);
   const variantResponse = await fetch(playlistUrl);
@@ -76,7 +77,7 @@ console.log(`Downloading ${playlist.segments.length} segments...`);
 const segments: Uint8Array[] = [];
 
 for (let i = 0; i < playlist.segments.length; i++) {
-  const segment = playlist.segments[i];
+  const segment = playlist.segments[i]!;
   process.stdout.write(`\rSegment ${i + 1}/${playlist.segments.length}`);
 
   try {
