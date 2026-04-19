@@ -4,6 +4,19 @@ import { downloadSegment } from './src/downloader';
 import { mergeToMp4 } from './src/merger';
 import readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
+
+async function checkFfmpeg() {
+  try {
+    await execAsync('ffmpeg -version');
+  } catch {
+    console.error('Error: ffmpeg is required but not found. Please install ffmpeg and ensure it is in your PATH.');
+    process.exit(1);
+  }
+}
 
 const url = process.argv[2];
 
@@ -11,6 +24,8 @@ if (!url) {
   console.error('Usage: meow-loader <m3u8-url> [output.mp4] [variant-index]');
   process.exit(1);
 }
+
+await checkFfmpeg();
 
 const output = process.argv[3] || 'output.mp4';
 
@@ -94,6 +109,11 @@ for (let i = 0; i < playlist.segments.length; i++) {
 }
 
 console.log('\nMerging segments into MP4...');
-await mergeToMp4(segments, output);
+try {
+  await mergeToMp4(segments, output);
+} catch (error) {
+  console.error(`\nFailed to merge segments: ${error instanceof Error ? error.message : error}`);
+  process.exit(1);
+}
 
 console.log(`Done! Saved to: ${output}`);
