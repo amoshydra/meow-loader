@@ -20,6 +20,22 @@ const DEFAULT_HEADERS: Record<string, string> = {
   'Sec-Fetch-Site': 'cross-site',
 };
 
+function showHelp() {
+  console.log(`Usage: meow-loader <m3u8-url> [output.mp4] [variant-index] [options]
+
+Options:
+  -H, --header <"Key: Value">    Add a custom HTTP header (repeatable)
+  --resume <dir>                  Resume a partial download from a saved working dir
+  -h, --help                      Show this help message
+
+Examples:
+  meow-loader https://example.com/video.m3u8
+  meow-loader https://example.com/video.m3u8 output.mp4 0
+  meow-loader https://example.com/video.m3u8 --header "Authorization: Bearer token"
+  meow-loader https://example.com/video.m3u8 -H "Referer: https://example.com"
+  meow-loader https://example.com/video.m3u8 --resume /tmp/meow-abc123`);
+}
+
 function parseArgs(argv: string[]): {
   headers: Record<string, string>;
   positionals: string[];
@@ -51,6 +67,9 @@ function parseArgs(argv: string[]): {
       }
       headers[key] = value;
       i++;
+    } else if (arg === '--help' || arg === '-h') {
+      showHelp();
+      process.exit(0);
     } else if (arg === '--resume') {
       i++;
       const dir = argv[i];
