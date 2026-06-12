@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0](https://github.com/amoshydra/meow-loader/compare/v0.1.0...v0.2.0) (2026-06-12)
+
+
+### Features
+
+* add --header/-H flag support for custom HTTP headers ([508da89](https://github.com/amoshydra/meow-loader/commit/508da8984fb2d81645da36d235020647c07f902d))
+* add --help / -h flag ([79541a9](https://github.com/amoshydra/meow-loader/commit/79541a9e0544fefe37705dcf4ffab68bb2e48865))
+* download to temp dir with retry prompt, resume support, and default browser headers ([d07e2e0](https://github.com/amoshydra/meow-loader/commit/d07e2e04801b87592ff0934c003a3f9e7cb46ca5))
+* set default User-Agent header (Chrome 148) unless overridden via --header ([3c7263b](https://github.com/amoshydra/meow-loader/commit/3c7263bdff6ae3b629bbdfabec4ea8d378e0bb49))
+
 ## [0.1.0](https://github.com/amoshydra/meow-loader/compare/v0.1.0...v0.1.0) (2026-04-19)
 
 
