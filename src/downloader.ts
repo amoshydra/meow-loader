@@ -4,9 +4,10 @@ export async function downloadSegment(
   uri: string,
   baseUrl: string,
   encryption?: M3U8Encryption,
+  headers?: Record<string, string>,
 ): Promise<Uint8Array> {
   const url = resolveUrl(uri, baseUrl);
-  const response = await fetch(url);
+  const response = await fetch(url, headers ? { headers } : undefined);
 
   if (!response.ok) {
     throw new Error(`Failed to download segment: ${url} (${response.status})`);
@@ -16,7 +17,7 @@ export async function downloadSegment(
   const data = new Uint8Array(buffer);
 
   if (encryption && encryption.method === 'AES-128') {
-    return decryptSegment(data, encryption, baseUrl);
+    return decryptSegment(data, encryption, baseUrl, headers);
   }
 
   return data;
@@ -26,9 +27,10 @@ async function decryptSegment(
   data: Uint8Array,
   encryption: M3U8Encryption,
   baseUrl: string,
+  headers?: Record<string, string>,
 ): Promise<Uint8Array> {
   const keyUrl = resolveUrl(encryption.uri, baseUrl);
-  const keyResponse = await fetch(keyUrl);
+  const keyResponse = await fetch(keyUrl, headers ? { headers } : undefined);
 
   if (!keyResponse.ok) {
     throw new Error(`Failed to download encryption key: ${keyUrl}`);

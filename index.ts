@@ -9,6 +9,40 @@ import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
 
+function parseHeaders(argv: string[]): { headers: Record<string, string>; positionals: string[] } {
+  const headers: Record<string, string> = {};
+  const positionals: string[] = [];
+  let i = 2;
+  while (i < argv.length) {
+    const arg = argv[i]!;
+    if (arg === '--header' || arg === '-H') {
+      i++;
+      const header = argv[i];
+      if (!header) {
+        console.error('Error: --header/-H requires an argument in "Key: Value" format');
+        process.exit(1);
+      }
+      const colonIdx = header.indexOf(':');
+      if (colonIdx === -1) {
+        console.error(`Error: Invalid header format "${header}". Use "Key: Value"`);
+        process.exit(1);
+      }
+      const key = header.slice(0, colonIdx).trim();
+      const value = header.slice(colonIdx + 1).trim();
+      if (!key) {
+        console.error(`Error: Header key cannot be empty in "${header}"`);
+        process.exit(1);
+      }
+      headers[key] = value;
+      i++;
+    } else {
+      positionals.push(arg);
+      i++;
+    }
+  }
+  return { headers, positionals };
+}
+
 async function checkFfmpeg() {
   try {
     await execAsync('ffmpeg -version');
@@ -18,19 +52,21 @@ async function checkFfmpeg() {
   }
 }
 
-const url = process.argv[2];
+const { headers, positionals } = parseHeaders(process.argv);
+
+const url = positionals[0];
 
 if (!url) {
-  console.error('Usage: meow-loader <m3u8-url> [output.mp4] [variant-index]');
+  console.error('Usage: meow-loader <m3u8-url> [output.mp4] [variant-index] [--header/-H "Key: Value" ...]');
   process.exit(1);
 }
 
 await checkFfmpeg();
 
-const output = process.argv[3] || 'output.mp4';
+const output = positionals[1] || 'output.mp4';
 
 console.log(`Fetching playlist: ${url}`);
-const response = await fetch(url);
+const response = await fetch(url, Object.keys(headers).length > 0 ? { headers } : undefined);
 
 if (!response.ok) {
   console.error(`Failed to fetch playlist: ${response.status}`);
@@ -50,7 +86,7 @@ if (playlist.isMaster && playlist.variants) {
   });
 
   let choice: number;
-  const variantArg = process.argv[4];
+  const variantArg = positionals[2];
   if (variantArg) {
     choice = parseInt(variantArg);
     if (isNaN(choice) || choice < 0 || choice >= playlist.variants.length) {
@@ -74,7 +110,7 @@ if (playlist.isMaster && playlist.variants) {
   playlistUrl = new URL(selected.uri, url).href;
 
   console.log(`Fetching variant playlist: ${playlistUrl}`);
-  const variantResponse = await fetch(playlistUrl);
+  const variantResponse = await fetch(playlistUrl, Object.keys(headers).length > 0 ? { headers } : undefined);
 
   if (!variantResponse.ok) {
     console.error(`Failed to fetch variant playlist: ${variantResponse.status}`);
@@ -99,7 +135,7 @@ for (let i = 0; i < playlist.segments.length; i++) {
   process.stdout.write(`\rSegment ${i + 1}/${playlist.segments.length}`);
 
   try {
-    const data = await downloadSegment(segment.uri, playlistUrl, playlist.encryption);
+    const data = await downloadSegment(segment.uri, playlistUrl, playlist.encryption, Object.keys(headers).length > 0 ? headers : undefined);
     segments.push(data);
   } catch (error) {
     console.error(`\nFailed to download segment ${i + 1}: ${segment.uri}`);
