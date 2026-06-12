@@ -1,18 +1,14 @@
-import { writeFile, unlink } from 'node:fs/promises';
+import { writeFile, unlink, rm, mkdtemp } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-export async function mergeToMp4(segments: Uint8Array[], outputPath: string): Promise<void> {
-  const tempDir = process.env.TMPDIR || '/tmp';
-  const inputTs = `${tempDir}/input_${Date.now()}.ts`;
+export async function mergeToMp4(segmentPaths: string[], outputPath: string): Promise<void> {
+  const tmpDir = await mkdtemp(join(tmpdir(), 'meow-merge-'));
+  const concatList = join(tmpDir, 'concat.txt');
 
-  const combined = new Uint8Array(segments.reduce((acc, s) => acc + s.length, 0));
-  let offset = 0;
-  for (const segment of segments) {
-    combined.set(segment, offset);
-    offset += segment.length;
-  }
-
-  await writeFile(inputTs, combined);
+  const lines = segmentPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`);
+  await writeFile(concatList, lines.join('\n') + '\n');
 
   const runFfmpeg = (args: string[]): Promise<void> =>
     new Promise((resolve, reject) => {
@@ -28,12 +24,15 @@ export async function mergeToMp4(segments: Uint8Array[], outputPath: string): Pr
     });
 
   try {
-    await runFfmpeg(['-y', '-i', inputTs, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', outputPath]);
+    await runFfmpeg(['-y', '-f', 'concat', '-safe', '0', '-i', concatList, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', outputPath]);
   } catch {
-    await runFfmpeg(['-y', '-i', inputTs, '-c', 'copy', outputPath]);
+    await runFfmpeg(['-y', '-f', 'concat', '-safe', '0', '-i', concatList, '-c', 'copy', outputPath]);
   } finally {
     try {
-      await unlink(inputTs);
+      await unlink(concatList);
+    } catch {}
+    try {
+      await rm(tmpDir, { recursive: true });
     } catch {}
   }
 }
