@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/amoshydra/meow-loader/compare/v0.2.0...v0.3.0) (2026-07-26)
+
+
+### Features
+
+* auto-suffix output filename to prevent overwriting existing files ([dbfb8a0](https://github.com/amoshydra/meow-loader/commit/dbfb8a03a4f5e5e269b78069c530033aef336e55))
+
+
+### Bug Fixes
+
+* default to highest quality variant (index 0) instead of lowest ([0ab489f](https://github.com/amoshydra/meow-loader/commit/0ab489fab23b3768ed99e2b87497668fc4edbf34))
+
 ## [0.2.0](https://github.com/amoshydra/meow-loader/compare/v0.1.0...v0.2.0) (2026-06-12)
 
 
