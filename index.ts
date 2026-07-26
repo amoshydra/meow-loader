@@ -7,6 +7,7 @@ import { stdin, stdout } from 'node:process';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, writeFile, readdir, rm } from 'node:fs/promises';
+import { getUniqueFilePath } from './src/output-path';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 
@@ -137,7 +138,7 @@ if (!url) {
 
 await checkFfmpeg();
 
-const output = positionals[1] || 'output.mp4';
+const output = positionals[1] ? resolve(positionals[1]) : getUniqueFilePath(resolve('output.mp4'));
 
 console.log(`Fetching playlist: ${url}`);
 const response = await fetch(url, hasHeaders ? { headers: cleanedHeaders } : undefined);
