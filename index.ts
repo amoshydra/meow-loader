@@ -169,13 +169,13 @@ if (playlist.isMaster && playlist.variants) {
     }
   } else {
     const rl = readline.createInterface({ input: stdin, output: stdout });
-    const input = await rl.question(`Select variant (0-${playlist.variants.length - 1}, default: ${playlist.variants.length - 1} highest): `);
+    const input = await rl.question(`Select variant (0-${playlist.variants.length - 1}, default: 0 highest): `);
     rl.close();
     const trimmed = input.trim();
-    choice = trimmed ? parseInt(trimmed) : playlist.variants.length - 1;
+    choice = trimmed ? parseInt(trimmed) : 0;
     if (isNaN(choice) || choice < 0 || choice >= playlist.variants.length) {
       console.error(`Invalid choice. Defaulting to highest bandwidth.`);
-      choice = playlist.variants.length - 1;
+      choice = 0;
     }
   }
 
