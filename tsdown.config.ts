@@ -3,7 +3,7 @@ import { defineConfig } from 'tsdown';
 export default defineConfig({
   entry: ['./index.ts'],
   platform: 'node',
-  target: 'node24',
+  target: 'node22',
   format: 'esm',
   minify: true,
   outDir: 'dist',

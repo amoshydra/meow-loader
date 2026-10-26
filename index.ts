@@ -1,298 +1,693 @@
 #!/usr/bin/env node
-import { parseM3U8 } from './src/m3u8-parser';
-import { downloadSegment } from './src/downloader';
-import { mergeToMp4 } from './src/merger';
+import { parseM3U8, sortVariantsByBandwidth } from './src/m3u8-parser';
+import type { M3U8Playlist, M3U8Segment, M3U8Variant } from './src/m3u8-parser';
+import { downloadSegmentToFile } from './src/downloader';
+import { abortActiveMerge, mergeToMp4 } from './src/merger';
+import {
+  DEFAULT_MAX_SEGMENTS,
+  DEFAULT_PLAYLIST_MAX_BYTES,
+  parseArgs,
+  USAGE,
+} from './src/args';
+import { formatBytes, formatDuration, sanitizeForDisplay, sanitizeMultiline } from './src/display';
+import { DiskSpaceError, DownloadLimitError, SegmentLimitError } from './src/errors';
+import { NetworkClient, readResponseText, UrlPolicyError } from './src/network';
+import { getUniqueFilePath } from './src/output-path';
+import { DownloadProgress } from './src/progress';
+import { validateMp4Output } from './src/output-validation';
+import {
+  cleanupResumeState,
+  initializeResumeState,
+  recordSegment,
+  saveResumeMetadata,
+} from './src/resume';
+import type { ResumeState } from './src/resume';
+import { redactUrl } from './src/url';
 import readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
-import { exec } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, writeFile, readdir, rm } from 'node:fs/promises';
-import { getUniqueFilePath } from './src/output-path';
+import { mkdtemp, lstat, realpath, rename, rm, stat, statfs, access } from 'node:fs/promises';
+import { constants, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 
-const execAsync = promisify(exec);
-
-const DEFAULT_HEADERS: Record<string, string> = {
-  'Accept': '*/*',
-  'Accept-Language': 'en-US,en;q=0.9',
-  'Sec-Fetch-Dest': 'empty',
-  'Sec-Fetch-Mode': 'cors',
-  'Sec-Fetch-Site': 'cross-site',
-};
+const execFileAsync = promisify(execFile);
+const MAX_ATTEMPTS = 3;
+const MAX_VARIANTS = 1_000;
+const MAX_EXPECTED_DURATION = 366 * 24 * 60 * 60;
+const FREE_SPACE_MARGIN = 512 * 1024 ** 2;
 
 function showHelp() {
-  console.log(`Usage: meow-loader <m3u8-url> [output.mp4] [variant-index] [options]
-
-Options:
-  -H, --header <"Key: Value">    Add a custom HTTP header (repeatable)
-  --resume <dir>                  Resume a partial download from a saved working dir
-  -h, --help                      Show this help message
-
-Examples:
-  meow-loader https://example.com/video.m3u8
-  meow-loader https://example.com/video.m3u8 output.mp4 0
-  meow-loader https://example.com/video.m3u8 --header "Authorization: Bearer token"
-  meow-loader https://example.com/video.m3u8 -H "Referer: https://example.com"
-  meow-loader https://example.com/video.m3u8 --resume /tmp/meow-abc123`);
+  console.log(USAGE);
 }
 
-function parseArgs(argv: string[]): {
-  headers: Record<string, string>;
-  positionals: string[];
-  resumeDir: string | undefined;
-} {
-  const headers: Record<string, string> = {};
-  const positionals: string[] = [];
-  let resumeDir: string | undefined;
-  let i = 2;
-  while (i < argv.length) {
-    const arg = argv[i]!;
-    if (arg === '--header' || arg === '-H') {
-      i++;
-      const header = argv[i];
-      if (!header) {
-        console.error('Error: --header/-H requires an argument in "Key: Value" format');
-        process.exit(1);
-      }
-      const colonIdx = header.indexOf(':');
-      if (colonIdx === -1) {
-        console.error(`Error: Invalid header format "${header}". Use "Key: Value"`);
-        process.exit(1);
-      }
-      const key = header.slice(0, colonIdx).trim();
-      const value = header.slice(colonIdx + 1).trim();
-      if (!key) {
-        console.error(`Error: Header key cannot be empty in "${header}"`);
-        process.exit(1);
-      }
-      headers[key] = value;
-      i++;
-    } else if (arg === '--help' || arg === '-h') {
-      showHelp();
-      process.exit(0);
-    } else if (arg === '--resume') {
-      i++;
-      const dir = argv[i];
-      if (!dir) {
-        console.error('Error: --resume requires a directory path');
-        process.exit(1);
-      }
-      resumeDir = dir;
-      i++;
-    } else {
-      positionals.push(arg);
-      i++;
-    }
-  }
-  return { headers, positionals, resumeDir };
-}
-
-async function promptRetry(attempts: number): Promise<'retry' | 'save'> {
-  const maxAttempts = 3;
-  const rl = readline.createInterface({ input: stdin, output: stdout });
+function getVersion(): string {
   try {
-    const remaining = maxAttempts - attempts;
-    const hint = remaining > 0 ? ` (${remaining} attempt${remaining > 1 ? 's' : ''} left)` : '';
-    const input = await rl.question(`\n[R]etry${hint}, [S]ave & exit: `);
-    const trimmed = input.trim().toLowerCase();
-    if (trimmed === 'r' || trimmed === 'retry') return 'retry';
-    return 'save';
-  } finally {
-    rl.close();
+    const require = createRequire(import.meta.url);
+    return (require('../package.json') as { version: string }).version;
+  } catch {
+    return process.env.npm_package_version ?? '0.0.0-dev';
   }
 }
 
 async function checkFfmpeg() {
   try {
-    await execAsync('ffmpeg -version');
+    await execFileAsync('ffmpeg', ['-version']);
+    await execFileAsync('ffprobe', ['-version']);
   } catch {
-    console.error('Error: ffmpeg is required but not found. Please install ffmpeg and ensure it is in your PATH.');
-    process.exit(1);
+    throw new Error(
+      'ffmpeg and ffprobe are required but not found. Please install ffmpeg and ensure both are in your PATH.',
+    );
   }
 }
 
-function padIndex(i: number, total: number): string {
-  return String(i).padStart(String(total).length, '0');
-}
-
-const { headers, positionals, resumeDir } = parseArgs(process.argv);
-
-const cleanedHeaders = { ...headers };
-if (!headers['User-Agent']) {
-  cleanedHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36';
-}
-for (const [k, v] of Object.entries(DEFAULT_HEADERS)) {
-  if (!(k in cleanedHeaders)) {
-    cleanedHeaders[k] = v;
+function parseVariantIndex(value: string, count: number): number {
+  if (!/^\d+$/.test(value)) {
+    throw new Error(`Invalid variant index "${sanitizeForDisplay(value, 40)}". Choose 0-${count - 1}`);
   }
-}
-const hasHeaders = Object.keys(cleanedHeaders).length > 0;
 
-const url = positionals[0];
+  const index = Number(value);
+  if (!Number.isInteger(index) || index < 0 || index >= count) {
+    throw new Error(`Invalid variant index. Choose 0-${count - 1}`);
+  }
 
-if (!url) {
-  console.error('Usage: meow-loader <m3u8-url> [output.mp4] [variant-index] [--header/-H "Key: Value" ...] [--resume <dir>]');
-  process.exit(1);
-}
-
-await checkFfmpeg();
-
-const output = positionals[1] ? resolve(positionals[1]) : getUniqueFilePath(resolve('output.mp4'));
-
-console.log(`Fetching playlist: ${url}`);
-const response = await fetch(url, hasHeaders ? { headers: cleanedHeaders } : undefined);
-
-if (!response.ok) {
-  console.error(`Failed to fetch playlist: ${response.status}`);
-  process.exit(1);
+  return index;
 }
 
-const content = await response.text();
-const playlist = parseM3U8(content);
+async function selectVariant(variants: M3U8Variant[], variantArg: string | undefined): Promise<M3U8Variant> {
+  const sorted = sortVariantsByBandwidth(variants);
 
-let playlistUrl = url;
-
-if (playlist.isMaster && playlist.variants) {
-  console.log('Master playlist detected. Available variants:');
-  playlist.variants.forEach((v, i) => {
-    const res = v.resolution ? ` (${v.resolution})` : '';
-    console.log(`  [${i}] ${v.bandwidth / 1000} kbps${res}`);
+  console.log('Master playlist detected. Available variants (highest first):');
+  sorted.forEach((variant, index) => {
+    const resolution = variant.resolution
+      ? ` (${sanitizeForDisplay(variant.resolution, 80)})`
+      : '';
+    const audio = variant.audioGroup
+      ? ` [audio: ${sanitizeForDisplay(variant.audioGroup, 80)}]`
+      : '';
+    console.log(`  [${index}] ${variant.bandwidth / 1000} kbps${resolution}${audio}`);
   });
 
-  let choice: number;
-  const variantArg = positionals[2];
-  if (variantArg) {
-    choice = parseInt(variantArg);
-    if (isNaN(choice) || choice < 0 || choice >= playlist.variants.length) {
-      console.error(`Invalid variant index. Choose 0-${playlist.variants.length - 1}`);
-      process.exit(1);
-    }
-  } else {
-    const rl = readline.createInterface({ input: stdin, output: stdout });
-    const input = await rl.question(`Select variant (0-${playlist.variants.length - 1}, default: 0 highest): `);
-    rl.close();
-    const trimmed = input.trim();
-    choice = trimmed ? parseInt(trimmed) : 0;
-    if (isNaN(choice) || choice < 0 || choice >= playlist.variants.length) {
-      console.error(`Invalid choice. Defaulting to highest bandwidth.`);
-      choice = 0;
-    }
+  if (variantArg !== undefined) {
+    return sorted[parseVariantIndex(variantArg, sorted.length)]!;
   }
 
-  const selected = playlist.variants[choice]!;
-  console.log(`Selected variant [${choice}]: ${selected.resolution || 'unknown'} @ ${selected.bandwidth / 1000} kbps`);
-  playlistUrl = new URL(selected.uri, url).href;
-
-  console.log(`Fetching variant playlist: ${playlistUrl}`);
-  const variantResponse = await fetch(playlistUrl, hasHeaders ? { headers: cleanedHeaders } : undefined);
-
-  if (!variantResponse.ok) {
-    console.error(`Failed to fetch variant playlist: ${variantResponse.status}`);
-    process.exit(1);
+  if (!stdin.isTTY) {
+    console.log('No TTY detected; selecting the highest quality variant.');
+    return sorted[0]!;
   }
 
-  const variantContent = await variantResponse.text();
-  Object.assign(playlist, parseM3U8(variantContent));
-}
-
-if (!playlist.segments || playlist.segments.length === 0) {
-  console.error('No segments found in playlist');
-  process.exit(1);
-}
-
-let tmpDir: string;
-let completedIndices = new Set<number>();
-
-if (resumeDir) {
-  tmpDir = resolve(process.cwd(), resumeDir);
+  const rl = readline.createInterface({ input: stdin, output: stdout });
   try {
-    const files = await readdir(tmpDir);
-    for (const f of files) {
-      if (f.startsWith('segment_') && f.endsWith('.ts')) {
-        const idx = parseInt(f.slice(8, -3), 10);
-        if (!isNaN(idx)) {
-          completedIndices.add(idx);
+    const input = await rl.question(`Select variant (0-${sorted.length - 1}, default: 0 highest): `);
+    const trimmed = input.trim();
+    return trimmed ? sorted[parseVariantIndex(trimmed, sorted.length)]! : sorted[0]!;
+  } finally {
+    rl.close();
+  }
+}
+
+function validateMediaPlaylist(playlist: M3U8Playlist): number {
+  if (playlist.isMaster) {
+    throw new Error('Expected a media playlist but received another master playlist');
+  }
+  if (!playlist.hasEndList) {
+    throw new Error('Live or incomplete playlists are not supported (missing #EXT-X-ENDLIST)');
+  }
+  if (playlist.hasMap) {
+    throw new Error('Fragmented MP4 playlists (#EXT-X-MAP) are not supported');
+  }
+  if (playlist.hasByteRange) {
+    throw new Error('Byte-range playlists (#EXT-X-BYTERANGE) are not supported');
+  }
+  if (!playlist.segments || playlist.segments.length === 0) {
+    throw new Error('No segments found in playlist');
+  }
+  if (playlist.segments.length > DEFAULT_MAX_SEGMENTS) {
+    throw new Error(
+      `Playlist has ${playlist.segments.length} segments, above the ${DEFAULT_MAX_SEGMENTS} limit`,
+    );
+  }
+
+  const expectedDuration = playlist.segments.reduce((sum, segment) => sum + segment.duration, 0);
+  if (!Number.isFinite(expectedDuration) || expectedDuration < 0) {
+    throw new Error('Playlist duration is invalid or too large');
+  }
+  if (expectedDuration > MAX_EXPECTED_DURATION) {
+    throw new Error(`Playlist duration ${formatDuration(expectedDuration)} is unreasonably large`);
+  }
+
+  return expectedDuration;
+}
+
+async function resolveOutputPath(requested: string | undefined, force: boolean): Promise<string> {
+  const output = requested
+    ? resolve(requested)
+    : force
+      ? resolve('output.mp4')
+      : getUniqueFilePath(resolve('output.mp4'));
+
+  if (!/\.mp4$/i.test(output)) {
+    throw new Error('Output filename must end with .mp4');
+  }
+
+  const existing = await stat(output).catch(() => undefined);
+  if (existing?.isDirectory()) {
+    throw new Error(`Output path is a directory: ${output}`);
+  }
+  if (existing && !force) {
+    throw new Error(`Output file already exists: ${output}\nUse --force to overwrite it.`);
+  }
+
+  const parent = await stat(dirname(output)).catch(() => undefined);
+  if (!parent?.isDirectory()) {
+    throw new Error(`Output directory does not exist: ${dirname(output)}`);
+  }
+
+  return output;
+}
+
+async function assertOutputAvailable(output: string, force: boolean): Promise<void> {
+  if (force) return;
+  const existing = await stat(output).catch(() => undefined);
+  if (existing) {
+    throw new Error(`Output file already exists: ${output}`);
+  }
+}
+
+async function prepareWorkingDirectory(
+  resumeDir: string | undefined,
+): Promise<{ tmpDir: string; ownsTempDir: boolean; workDir: string }> {
+  if (!resumeDir) {
+    const tmpDir = await mkdtemp(join(tmpdir(), 'meow-'));
+    const workDir = await mkdtemp(join(tmpDir, '.meow-loader-'));
+    registerWorkDirCleanup(workDir);
+    return { tmpDir, ownsTempDir: true, workDir };
+  }
+
+  const tmpDir = await realpath(resolve(resumeDir)).catch(() => undefined);
+  if (!tmpDir) {
+    throw new Error(`Resume directory does not exist: ${resumeDir}`);
+  }
+
+  const info = await lstat(tmpDir).catch(() => undefined);
+  if (!info?.isDirectory()) {
+    throw new Error(`Resume path is not a directory: ${tmpDir}`);
+  }
+
+  await access(tmpDir, constants.W_OK).catch(() => {
+    throw new Error(`Resume directory is not writable: ${tmpDir}`);
+  });
+
+  if ((info.mode & 0o002) !== 0) {
+    console.warn(`Warning: resume directory is world-writable: ${tmpDir}`);
+  }
+
+  const workDir = await mkdtemp(join(tmpDir, '.meow-loader-'));
+  registerWorkDirCleanup(workDir);
+  return { tmpDir, ownsTempDir: false, workDir };
+}
+
+function registerWorkDirCleanup(workDir: string): void {
+  process.once('exit', () => {
+    rmSync(workDir, { recursive: true, force: true });
+  });
+}
+
+async function getFreeBytes(dir: string): Promise<number | undefined> {
+  try {
+    const info = await statfs(dir);
+    return Number(info.bavail) * Number(info.bsize);
+  } catch {
+    return undefined;
+  }
+}
+
+async function ensureFreeSpace(dir: string, requiredBytes: number, label: string): Promise<void> {
+  if (!Number.isFinite(requiredBytes) || requiredBytes <= 0) return;
+  const free = await getFreeBytes(dir);
+  if (free === undefined) return;
+  if (free < requiredBytes) {
+    throw new DiskSpaceError(
+      `Not enough free space for ${label}: need about ${formatBytes(requiredBytes)}, ${formatBytes(free)} available in ${dir}. Free space or use --resume on another disk.`,
+    );
+  }
+}
+
+async function promptRetry(attempts: number): Promise<'retry' | 'save'> {
+  const remaining = Math.max(0, MAX_ATTEMPTS - attempts);
+  if (remaining === 0) {
+    return 'save';
+  }
+
+  const hint = ` (${remaining} attempt${remaining > 1 ? 's' : ''} left)`;
+  const rl = readline.createInterface({ input: stdin, output: stdout });
+  try {
+    const input = await rl.question(`\n[R]etry${hint}, [S]ave & exit: `);
+    const trimmed = input.trim().toLowerCase();
+    return trimmed === 'r' || trimmed === 'retry' ? 'retry' : 'save';
+  } finally {
+    rl.close();
+  }
+}
+
+async function promptLargeDownload(estimatedBytes: number, limitBytes: number): Promise<boolean> {
+  if (!stdin.isTTY) return false;
+
+  const rl = readline.createInterface({ input: stdin, output: stdout });
+  try {
+    const input = await rl.question(
+      `Estimated download is ${formatBytes(estimatedBytes)}, above the ${formatBytes(limitBytes)} limit. Continue? [y/N] `,
+    );
+    return /^y(es)?$/i.test(input.trim());
+  } finally {
+    rl.close();
+  }
+}
+
+async function replaceSegmentFile(source: string, target: string): Promise<void> {
+  try {
+    await rename(source, target);
+  } catch (error) {
+    if (!isReplaceError(error)) throw error;
+    await rm(target, { force: true });
+    await rename(source, target);
+  }
+}
+
+async function downloadSegments(
+  segments: M3U8Segment[],
+  playlistUrl: string,
+  tmpDir: string,
+  workDir: string,
+  resume: ResumeState,
+  network: NetworkClient,
+  keyCache: Map<string, Buffer>,
+  maxDownload: number,
+  maxSegmentSize: number,
+): Promise<{ segmentPaths: string[]; totalBytes: number } | null> {
+  const segmentPaths: string[] = [];
+  const initialBytes = Object.values(resume.metadata.segments).reduce((sum, segment) => sum + segment.size, 0);
+  let totalBytes = initialBytes;
+
+  if (maxDownload > 0 && initialBytes > maxDownload) {
+    throw new DownloadLimitError(
+      `Existing segments total ${formatBytes(initialBytes)}, above the ${formatBytes(maxDownload)} limit. Raise it with --max-download.`,
+    );
+  }
+  const progress = new DownloadProgress(
+    segments.length,
+    initialBytes,
+    resume.completed.size,
+    Boolean(stdin.isTTY),
+  );
+
+  try {
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i]!;
+      const fileName = `segment_${String(i).padStart(String(segments.length).length, '0')}.ts`;
+      const segmentPath = join(tmpDir, fileName);
+
+      if (resume.completed.has(i)) {
+        segmentPaths.push(segmentPath);
+        continue;
+      }
+
+      if (maxDownload > 0 && totalBytes >= maxDownload) {
+        throw new DownloadLimitError(
+          `Download limit reached (${formatBytes(maxDownload)}). Resume later with: --resume ${tmpDir} --max-download ${formatBytes(maxDownload * 2)}`,
+        );
+      }
+
+      const remainingLimit = maxDownload > 0 ? maxDownload - totalBytes : Infinity;
+      const maxBytes = Math.min(maxSegmentSize, remainingLimit);
+
+      try {
+        if (i === 0 || i % 10 === 0) {
+          await ensureFreeSpace(
+            tmpDir,
+            Math.min(maxSegmentSize, Number.isFinite(maxBytes) ? maxBytes : maxSegmentSize) + FREE_SPACE_MARGIN,
+            'download',
+          );
+        }
+      } catch (error) {
+        console.error(`\n${errorMessage(error)}`);
+        console.log(`Resume later with: --resume ${tmpDir}`);
+        process.exitCode = 1;
+        return null;
+      }
+
+      progress.startSegment(i);
+      let attempts = 0;
+      let downloaded = false;
+
+      while (!downloaded) {
+        try {
+          const partialPath = join(workDir, `${fileName}.part`);
+          const result = await downloadSegmentToFile(segment, playlistUrl, partialPath, {
+            network,
+            keyCache,
+            maxBytes,
+            onProgress: bytes => progress.addBytes(bytes),
+          });
+
+          await replaceSegmentFile(partialPath, segmentPath);
+
+          if (resume.persist) {
+            recordSegment(resume.metadata, i, fileName, result.size, result.sha256);
+            await saveResumeMetadata(tmpDir, resume.metadata, workDir);
+          }
+
+          segmentPaths.push(segmentPath);
+          totalBytes += result.size;
+          progress.completeSegment(result.size);
+          downloaded = true;
+        } catch (error) {
+          if (
+            error instanceof SegmentLimitError ||
+            error instanceof DownloadLimitError ||
+            error instanceof DiskSpaceError ||
+            error instanceof UrlPolicyError
+          ) {
+            console.error(`\n${errorMessage(error)}`);
+            console.log(`Resume later with: --resume ${tmpDir}`);
+            process.exitCode = 1;
+            return null;
+          }
+
+          attempts++;
+          console.error(`\nFailed to download segment ${i + 1}`);
+          console.error(errorMessage(error));
+
+          if (attempts >= MAX_ATTEMPTS) {
+            console.error(`Max retries reached for segment ${i + 1}.`);
+            console.log(`Resume later with: --resume ${tmpDir}`);
+            process.exitCode = 1;
+            return null;
+          }
+
+          if (stdin.isTTY) {
+            const action = await promptRetry(attempts);
+            if (action === 'save') {
+              console.log(`Partial download saved. Resume later with: --resume ${tmpDir}`);
+              process.exitCode = 1;
+              return null;
+            }
+          } else {
+            const wait = 500 * 2 ** (attempts - 1);
+            console.error(`Retrying in ${wait}ms...`);
+            await delay(wait);
+          }
         }
       }
     }
-  } catch {
-    console.error(`Error: resume directory does not exist: ${tmpDir}`);
-    process.exit(1);
+
+    return { segmentPaths, totalBytes };
+  } finally {
+    progress.finish();
+    await rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
-  console.log(`Working dir: ${tmpDir} (resumed, ${completedIndices.size} segments already downloaded)`);
-} else {
-  tmpDir = await mkdtemp(join(tmpdir(), 'meow-'));
-  console.log(`Working dir: ${tmpDir}`);
 }
 
-let interrupted = false;
-process.on('SIGINT', () => {
-  if (!interrupted) {
-    interrupted = true;
-    console.log(`\nInterrupted. Resume later with: --resume ${tmpDir}`);
-    process.exit(0);
-  }
-});
-
-console.log(`Downloading ${playlist.segments.length} segments...`);
-
-const segmentPaths: string[] = [];
-
-for (let i = 0; i < playlist.segments.length; i++) {
-  const segment = playlist.segments[i]!;
-  const segmentPath = join(tmpDir, `segment_${padIndex(i, playlist.segments.length)}.ts`);
-
-  if (completedIndices.has(i)) {
-    segmentPaths.push(segmentPath);
-    continue;
-  }
-
-  process.stdout.write(`\rSegment ${i + 1}/${playlist.segments.length}`);
-
-  let attempts = 0;
-  const maxAttempts = 3;
-  let success = false;
-
-  while (!success) {
-    try {
-      const data = await downloadSegment(
-        segment.uri,
-        playlistUrl,
-        playlist.encryption,
-        hasHeaders ? cleanedHeaders : undefined,
-      );
-      await writeFile(segmentPath, data);
-      segmentPaths.push(segmentPath);
-      success = true;
-    } catch (error) {
-      console.error(`\nFailed to download segment ${i + 1}: ${segment.uri}`);
-      console.error(error);
-      attempts++;
-
-      const action = await promptRetry(attempts);
-      if (action === 'save') {
-        console.log(`Resume later with: --resume ${tmpDir}`);
-        process.exit(0);
-      }
-
-      if (attempts >= maxAttempts) {
-        console.error(`Max retries reached for segment ${i + 1}.`);
-        console.log(`Resume later with: --resume ${tmpDir}`);
-        process.exit(1);
-      }
+async function replaceFile(source: string, target: string): Promise<void> {
+  try {
+    await rename(source, target);
+    return;
+  } catch (error) {
+    if (!isReplaceError(error)) {
+      throw error;
     }
   }
+
+  const backup = `${target}.meow-loader-backup-${process.pid}-${Date.now()}`;
+  await rename(target, backup);
+
+  try {
+    await rename(source, target);
+  } catch (error) {
+    await rename(backup, target).catch(() => {});
+    throw error;
+  }
+
+  await rm(backup, { force: true }).catch(() => {});
 }
 
-console.log('\nMerging segments into MP4...');
-try {
-  await mergeToMp4(segmentPaths, output);
-} catch (error) {
-  console.error(`\nFailed to merge segments: ${error instanceof Error ? error.message : error}`);
-  console.log(`Segments preserved at: ${tmpDir}`);
-  process.exit(1);
+function isReplaceError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === 'EEXIST' || code === 'EPERM' || code === 'ENOTEMPTY';
 }
 
-await rm(tmpDir, { recursive: true });
-console.log(`Done! Saved to: ${output}`);
+async function cleanupWorkingDirectory(
+  tmpDir: string,
+  ownsTempDir: boolean,
+  cleanupResumeDir: boolean,
+  resume: ResumeState,
+): Promise<void> {
+  if (ownsTempDir) {
+    await rm(tmpDir, { recursive: true, force: true });
+    return;
+  }
+
+  if (cleanupResumeDir) {
+    await cleanupResumeState(tmpDir, resume.metadata);
+  }
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function resolveManifestUrl(uri: string, baseUrl: string): string {
+  try {
+    return new URL(uri, baseUrl).href;
+  } catch {
+    throw new Error('Invalid playlist URL in manifest');
+  }
+}
+
+function estimateBytes(bandwidth: number, duration: number): number | undefined {
+  if (!Number.isFinite(bandwidth) || bandwidth <= 0 || !Number.isFinite(duration) || duration <= 0) {
+    return undefined;
+  }
+  const estimate = (bandwidth / 8) * duration;
+  return Number.isFinite(estimate) ? estimate : undefined;
+}
+
+async function main(): Promise<void> {
+  const args = parseArgs(process.argv);
+
+  if (args.help) {
+    showHelp();
+    return;
+  }
+  if (args.version) {
+    console.log(getVersion());
+    return;
+  }
+  if (args.cleanup && !args.resumeDir) {
+    throw new Error('--cleanup requires --resume');
+  }
+  if (args.maxSegmentSize <= 0) {
+    throw new Error('--max-segment-size must be greater than 0');
+  }
+
+  const [url, outputArg, variantArg, ...extra] = args.positionals;
+  if (!url) {
+    console.error(USAGE);
+    process.exitCode = 1;
+    return;
+  }
+  if (extra.length > 0) {
+    throw new Error(`Unexpected argument: ${sanitizeForDisplay(extra[0]!, 80)}`);
+  }
+
+  const network = new NetworkClient({
+    playlistUrl: url,
+    userHeaders: args.headers,
+    headerOrigins: args.headerOrigins,
+    allowPrivateNetwork: args.allowPrivateNetwork,
+    allowInsecure: args.allowInsecure,
+  });
+
+  console.log(`Fetching playlist: ${redactUrl(url)}`);
+  const response = await network.fetch(url, {}, { attempts: 3, label: 'playlist' });
+  if (!response.ok) {
+    throw new Error(`Failed to fetch playlist: ${response.status}`);
+  }
+
+  const masterUrl = response.url || url;
+  let playlist = parseM3U8(await readResponseText(response, DEFAULT_PLAYLIST_MAX_BYTES));
+  let playlistUrl = masterUrl;
+  let selectedVariant: M3U8Variant | undefined;
+
+  if (playlist.isMaster) {
+    if (!playlist.variants || playlist.variants.length === 0) {
+      throw new Error('Master playlist contains no variants');
+    }
+    if (playlist.variants.length > MAX_VARIANTS) {
+      throw new Error(`Master playlist has too many variants (${playlist.variants.length})`);
+    }
+
+    const masterPlaylist = playlist;
+    selectedVariant = await selectVariant(masterPlaylist.variants!, variantArg);
+
+    if (
+      selectedVariant.audioGroup &&
+      masterPlaylist.separateAudioGroups.includes(selectedVariant.audioGroup)
+    ) {
+      throw new Error(
+        `The selected variant uses a separate audio rendition (${sanitizeForDisplay(selectedVariant.audioGroup, 80)}), which is not supported`,
+      );
+    }
+
+    playlistUrl = resolveManifestUrl(selectedVariant.uri, masterUrl);
+
+    console.log(
+      `Selected variant: ${sanitizeForDisplay(selectedVariant.resolution || 'unknown', 80)} @ ${selectedVariant.bandwidth / 1000} kbps`,
+    );
+    console.log(`Fetching variant playlist: ${redactUrl(playlistUrl)}`);
+
+    const variantResponse = await network.fetch(playlistUrl, {}, { attempts: 3, label: 'variant playlist' });
+    if (!variantResponse.ok) {
+      throw new Error(`Failed to fetch variant playlist: ${variantResponse.status}`);
+    }
+
+    playlistUrl = variantResponse.url || playlistUrl;
+    playlist = parseM3U8(await readResponseText(variantResponse, DEFAULT_PLAYLIST_MAX_BYTES));
+  } else if (variantArg !== undefined) {
+    throw new Error('variant-index can only be used with a master playlist');
+  }
+
+  const expectedDuration = validateMediaPlaylist(playlist);
+  const segments = playlist.segments!;
+  const estimatedBytes = selectedVariant
+    ? estimateBytes(selectedVariant.bandwidth, expectedDuration)
+    : undefined;
+
+  if (args.dryRun) {
+    console.log(`Segments: ${segments.length}`);
+    console.log(`Duration: ${formatDuration(expectedDuration)}`);
+    if (estimatedBytes !== undefined) {
+      console.log(`Estimated size: ~${formatBytes(estimatedBytes)} (bandwidth-based)`);
+    }
+    if (args.maxDownload > 0) {
+      console.log(`Download limit: ${formatBytes(args.maxDownload)}`);
+    }
+    const free = await getFreeBytes(process.cwd());
+    if (free !== undefined) {
+      console.log(`Free space: ${formatBytes(free)}`);
+    }
+    return;
+  }
+
+  await checkFfmpeg();
+  const output = await resolveOutputPath(outputArg, args.force);
+
+  let maxDownload = args.maxDownload;
+  if (estimatedBytes !== undefined && maxDownload > 0 && estimatedBytes > maxDownload) {
+    if (await promptLargeDownload(estimatedBytes, maxDownload)) {
+      maxDownload = Math.ceil(estimatedBytes * 1.25);
+      console.log(`Continuing with a limit of ${formatBytes(maxDownload)} for this run.`);
+    } else {
+      throw new DownloadLimitError(
+        `Estimated download is ${formatBytes(estimatedBytes)}, above the ${formatBytes(maxDownload)} limit. Use --max-download to raise it.`,
+      );
+    }
+  }
+
+  const { tmpDir, ownsTempDir, workDir } = await prepareWorkingDirectory(args.resumeDir);
+
+  if (estimatedBytes !== undefined) {
+    await ensureFreeSpace(tmpDir, estimatedBytes + FREE_SPACE_MARGIN, 'download');
+  }
+
+  const resume = await initializeResumeState({
+    dir: tmpDir,
+    sourceUrl: url,
+    mediaPlaylistUrl: playlistUrl,
+    segments,
+    persist: true,
+    tempDir: workDir,
+  });
+
+  console.log(`Working dir: ${tmpDir}`);
+  if (resume.completed.size > 0) {
+    console.log(`Resuming with ${resume.completed.size}/${segments.length} segments already downloaded`);
+  }
+  console.log(`Downloading ${segments.length} segments...`);
+
+  let outputTempDir: string | undefined;
+
+  process.once('SIGINT', () => {
+    abortActiveMerge();
+    rmSync(workDir, { recursive: true, force: true });
+    if (outputTempDir) {
+      rmSync(outputTempDir, { recursive: true, force: true });
+    }
+    console.error(`\nInterrupted. Resume later with: --resume ${tmpDir}`);
+    process.exit(130);
+  });
+
+  const result = await downloadSegments(
+    segments,
+    playlistUrl,
+    tmpDir,
+    workDir,
+    resume,
+    network,
+    new Map(),
+    maxDownload,
+    args.maxSegmentSize,
+  );
+  if (!result) {
+    return;
+  }
+
+  await assertOutputAvailable(output, args.force);
+  await ensureFreeSpace(
+    dirname(output),
+    result.totalBytes + Math.max(FREE_SPACE_MARGIN, result.totalBytes * 0.05),
+    'merge',
+  );
+
+  outputTempDir = await mkdtemp(join(dirname(output), '.meow-loader-'));
+  const partialOutput = join(outputTempDir, basename(output));
+
+  console.log(`\nMerging ${formatBytes(result.totalBytes)} into MP4...`);
+  try {
+    await mergeToMp4(result.segmentPaths, partialOutput);
+    console.log('Verifying output...');
+    await validateMp4Output(partialOutput, expectedDuration);
+    await assertOutputAvailable(output, args.force);
+    await replaceFile(partialOutput, output);
+  } catch (error) {
+    throw new Error(
+      `Failed to finalize output: ${errorMessage(error)}\nSegments preserved at: ${tmpDir}`,
+    );
+  } finally {
+    await rm(outputTempDir, { recursive: true, force: true }).catch(() => {});
+    outputTempDir = undefined;
+  }
+
+  try {
+    await cleanupWorkingDirectory(tmpDir, ownsTempDir, args.cleanup, resume);
+  } catch (error) {
+    console.warn(`Warning: failed to clean up ${tmpDir}: ${errorMessage(error)}`);
+  }
+
+  console.log(`Done! Saved to: ${output}`);
+  if (!ownsTempDir && !args.cleanup) {
+    console.log(`Segments kept at: ${tmpDir}`);
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return sanitizeMultiline(error instanceof Error ? error.message : String(error));
+}
+
+main().catch((error) => {
+  console.error(errorMessage(error));
+  process.exitCode = 1;
+});

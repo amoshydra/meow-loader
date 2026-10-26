@@ -46,13 +46,22 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Build
         run: pnpm run build
 
       - name: Test
         run: pnpm test:run
+
+      - name: Lint package
+        run: pnpm lint:package
 
       - name: Publish to npm
         run: npm publish --access public

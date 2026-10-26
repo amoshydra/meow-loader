@@ -1,16 +1,31 @@
 {
   "name": "meow-loader",
   "version": "0.3.0",
-  "description": "Download M3U8/HLS video streams and merge into MP4",
+  "description": "CLI to download M3U8/HLS video streams and merge them into MP4",
   "homepage": "https://github.com/amoshydra/meow-loader",
   "repository": {
     "type": "git",
-    "url": "https://github.com/amoshydra/meow-loader.git"
+    "url": "git+https://github.com/amoshydra/meow-loader.git"
   },
   "bugs": {
     "url": "https://github.com/amoshydra/meow-loader/issues"
   },
   "type": "module",
+  "license": "MIT",
+  "author": "amoshydra",
+  "keywords": [
+    "hls",
+    "m3u8",
+    "video",
+    "download",
+    "downloader",
+    "ffmpeg",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.33.2",
   "bin": {
     "meow-loader": "./dist/index.mjs"
   },
@@ -20,13 +35,16 @@
   "scripts": {
     "build": "tsdown",
     "prepack": "pnpm run build",
-    "start": "node dist/index.js",
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:run": "vitest run"
+    "start": "node dist/index.mjs",
+    "test": "pnpm build && vitest run",
+    "test:watch": "pnpm build && vitest",
+    "test:run": "pnpm build && vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint:package": "publint"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "publint": "^0.3.25",
     "tsdown": "^0.21.9",
     "typescript": "^5",
     "vitest": "^2.0.0"
