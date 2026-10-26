@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.4.0](https://github.com/amoshydra/meow-loader/compare/v0.3.0...v0.4.0) (2026-10-26)
+
+
+### ⚠ BREAKING CHANGES
+
+* requires Node.js 22+, custom headers are playlist-origin-scoped by default, private-network URLs require --allow-private-network, explicit outputs require --force and .mp4, unsupported HLS inputs now fail, and default download/segment limits apply.
+
+### Features
+
+* harden security boundaries and large-file handling ([40ba490](https://github.com/amoshydra/meow-loader/commit/40ba490996777279e9c393544f2d8f34e66e7af9))
+
+
+### Bug Fixes
+
+* **ci:** use packageManager pnpm version ([116aad4](https://github.com/amoshydra/meow-loader/commit/116aad4f4d7d6f61daa56da7f439be40dd8e9ffb))
+
+
+### Miscellaneous Chores
+
+* release 0.4.0 ([9085e5c](https://github.com/amoshydra/meow-loader/commit/9085e5c4f165cb51eec9c752ca9b734c242ce22b))
+
 ## [0.3.0](https://github.com/amoshydra/meow-loader/compare/v0.2.0...v0.3.0) (2026-07-26)
 
 
