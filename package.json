@@ -1,6 +1,6 @@
 {
   "name": "meow-loader",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "CLI to download M3U8/HLS video streams and merge them into MP4",
   "homepage": "https://github.com/amoshydra/meow-loader",
   "repository": {
