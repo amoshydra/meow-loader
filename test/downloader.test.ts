@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveUrl } from '../src/downloader';
+import { resolveUrl, ivFromSequence } from '../src/downloader';
 
 describe('downloader', () => {
   describe('resolveUrl', () => {
@@ -37,6 +37,22 @@ describe('downloader', () => {
       const result = resolveUrl('key.key', 'https://example.com/video/playlist.m3u8');
 
       expect(result).toBe('https://example.com/video/key.key');
+    });
+  });
+
+  describe('ivFromSequence', () => {
+    it('should use an all-zero IV for sequence zero', () => {
+      expect(Array.from(ivFromSequence(0))).toEqual(Array(16).fill(0));
+    });
+
+    it('should encode the sequence as a 128-bit big-endian value', () => {
+      expect(Array.from(ivFromSequence(1))).toEqual([...Array(15).fill(0), 1]);
+      expect(Array.from(ivFromSequence(0x0102))).toEqual([...Array(14).fill(0), 1, 2]);
+    });
+
+    it('should reject negative and unsafe sequence numbers', () => {
+      expect(() => ivFromSequence(-1)).toThrow('Invalid media sequence number');
+      expect(() => ivFromSequence(Number.MAX_SAFE_INTEGER + 1)).toThrow('Invalid media sequence number');
     });
   });
 });

@@ -12,7 +12,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [22]
+        node-version: [22, 24]
 
     steps:
       - uses: actions/checkout@v4
@@ -28,11 +28,23 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'pnpm'
 
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Build
         run: pnpm run build
 
       - name: Test
         run: pnpm test:run
+
+      - name: Lint package
+        run: pnpm lint:package
+
+      - name: CLI smoke test
+        run: node dist/index.mjs --help

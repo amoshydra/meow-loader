@@ -27,5 +27,5 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "exclude": ["test/fixtures/segments"]
+  "exclude": ["test/fixtures/segments", "dist"]
 }
