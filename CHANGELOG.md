@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/amoshydra/meow-loader/compare/v0.4.1...v0.4.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* keep completed downloads when the output name appears mid-download ([f018df5](https://github.com/amoshydra/meow-loader/commit/f018df5e0487424d514e378c624ce56acef50688))
+
 ## [0.4.1](https://github.com/amoshydra/meow-loader/compare/v0.4.0...v0.4.1) (2026-10-30)
 
 
