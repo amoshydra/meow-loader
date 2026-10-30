@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.1](https://github.com/amoshydra/meow-loader/compare/v0.4.0...v0.4.1) (2026-10-30)
+
+
+### Features
+
+* add curl mode for Copy as cURL commands ([bf71f35](https://github.com/amoshydra/meow-loader/commit/bf71f358567baac3a7027876c2fb9257965f0db9))
+
+
+### CI/CD
+
+* keep component-less release tags in manifest mode ([aca242c](https://github.com/amoshydra/meow-loader/commit/aca242ce1361eea3838b53e0e9cdb28df5389d96))
+* read release-please config instead of release-type input ([73c8c0a](https://github.com/amoshydra/meow-loader/commit/73c8c0a6e29c03ff5e0e1a844170cde60c9970c6))
+
 ## [0.4.0](https://github.com/amoshydra/meow-loader/compare/v0.3.0...v0.4.0) (2026-10-26)
 
 
