@@ -157,6 +157,9 @@ If a limit is reached:
   the CLI uses `output-1.mp4`, `output-2.mp4`, and so on.
 - With an explicit output filename, the CLI refuses to overwrite an existing
   file unless you pass `--force`.
+- If the chosen filename appears while downloading (for example, another
+  process creates it), the CLI saves to the next free `-1`, `-2`, ... name
+  instead of discarding the completed download.
 - Output filenames must end in `.mp4`.
 - The merged file is written to a private temporary directory and renamed only
   after ffmpeg succeeds and ffprobe confirms the expected duration.
@@ -167,6 +170,12 @@ If a limit is reached:
 `--resume` never deletes the directory you pass. Segments are kept after a
 successful merge unless `--cleanup` is used, and `--cleanup` only removes
 files recorded by meow-loader.
+
+Resuming also works after a failed merge: the downloaded segments are still in
+the working directory printed during the run (`Working dir: ...`), so
+`--resume <dir>` validates them and merges again without downloading. The same
+playlist URL is re-fetched and checked; if it has changed, the resume is
+rejected.
 
 Resume metadata is written atomically with mode `0600` and contains hashed
 playlist identities plus per-segment SHA-256 hashes. It does not store raw

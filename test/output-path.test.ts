@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { getUniqueFilePath } from '../src/output-path';
+import { getUniqueFilePath, pickAvailableOutputPath } from '../src/output-path';
 
 describe('getUniqueFilePath', () => {
   let tmpDir: string;
@@ -67,5 +67,37 @@ describe('getUniqueFilePath', () => {
     const path = join(dir, 'output.mp4');
     writeFileSync(path, '');
     expect(getUniqueFilePath(path)).toBe(join(dir, 'output-1.mp4'));
+  });
+});
+
+describe('pickAvailableOutputPath', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'meow-loader-test-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('keeps the requested path when it is free', () => {
+    const path = join(tmpDir, 'output.mp4');
+    expect(pickAvailableOutputPath(path, false)).toEqual({ path, renamed: false });
+  });
+
+  it('moves to the next free name when the file appeared', () => {
+    const path = join(tmpDir, 'output.mp4');
+    writeFileSync(path, 'someone else');
+    expect(pickAvailableOutputPath(path, false)).toEqual({
+      path: join(tmpDir, 'output-1.mp4'),
+      renamed: true,
+    });
+  });
+
+  it('honours --force', () => {
+    const path = join(tmpDir, 'output.mp4');
+    writeFileSync(path, '');
+    expect(pickAvailableOutputPath(path, true)).toEqual({ path, renamed: false });
   });
 });

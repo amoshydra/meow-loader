@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { execFile, spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -92,6 +92,7 @@ describe.skipIf(!canRun)('CLI end-to-end', () => {
   let baseUrl: string;
   let tempRoot: string;
   let segmentRequests: string[] = [];
+  let segmentGate: { path: string; started: () => void; released: Promise<void> } | undefined;
 
   beforeAll(async () => {
     tempRoot = await mkdtemp(join(tmpdir(), 'meow-loader-e2e-'));
@@ -199,6 +200,10 @@ describe.skipIf(!canRun)('CLI end-to-end', () => {
 
       if (pathname.startsWith('/segments/') || pathname.startsWith('/other/segments/')) {
         segmentRequests.push(pathname);
+        if (segmentGate?.path === pathname) {
+          segmentGate.started();
+          await segmentGate.released;
+        }
         const fileName = pathname.split('/').pop()!;
 
         if (fileName === 'corrupt.html') {
@@ -266,6 +271,56 @@ describe.skipIf(!canRun)('CLI end-to-end', () => {
     expect(stdout).toContain('Done! Saved to');
     expect((await readFile(output)).byteLength).toBeGreaterThan(0);
     expect(segmentRequests).toHaveLength(3);
+  });
+
+  it('uses the next free filename when the output appears during download', async () => {
+    const output = join(tempRoot, 'appeared.mp4');
+    let markStarted!: () => void;
+    let releaseSegment!: () => void;
+    const started = new Promise<void>(resolve => {
+      markStarted = resolve;
+    });
+    const released = new Promise<void>(resolve => {
+      releaseSegment = resolve;
+    });
+    segmentGate = { path: '/segments/segment_001_blue.ts', started: markStarted, released };
+
+    const child = spawn(
+      process.execPath,
+      [distEntry, `${baseUrl}/media.m3u8`, output, '--allow-private-network'],
+      { cwd: tempRoot, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', chunk => {
+      stderr += chunk;
+    });
+
+    const closed = new Promise<number | null>(resolve => {
+      child.on('close', resolve);
+    });
+
+    try {
+      await started;
+      // Simulate another process creating the requested filename mid-download.
+      await writeFile(output, 'created by another process');
+      releaseSegment();
+
+      const code = await closed;
+      expect(code, stderr).toBe(0);
+      expect(await readFile(output, 'utf8')).toBe('created by another process');
+      expect(existsSync(join(tempRoot, 'appeared-1.mp4'))).toBe(true);
+      expect(stdout).toContain('Output appeared during the download');
+    } finally {
+      releaseSegment();
+      segmentGate = undefined;
+    }
   });
 
   it('downloads from a pasted Copy as cURL command', async () => {

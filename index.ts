@@ -12,7 +12,7 @@ import {
 import { formatBytes, formatDuration, sanitizeForDisplay, sanitizeMultiline } from './src/display';
 import { DiskSpaceError, DownloadLimitError, SegmentLimitError } from './src/errors';
 import { NetworkClient, readResponseText, UrlPolicyError } from './src/network';
-import { getUniqueFilePath } from './src/output-path';
+import { getUniqueFilePath, pickAvailableOutputPath } from './src/output-path';
 import { DownloadProgress } from './src/progress';
 import { validateMp4Output } from './src/output-validation';
 import {
@@ -659,26 +659,31 @@ async function main(): Promise<void> {
     return;
   }
 
-  await assertOutputAvailable(output, args.force);
+  const finalOutput = pickAvailableOutputPath(output, args.force);
+  if (finalOutput.renamed) {
+    console.log(`Output appeared during the download; saving to: ${finalOutput.path}`);
+  }
+
+  await assertOutputAvailable(finalOutput.path, args.force);
   await ensureFreeSpace(
-    dirname(output),
+    dirname(finalOutput.path),
     result.totalBytes + Math.max(FREE_SPACE_MARGIN, result.totalBytes * 0.05),
     'merge',
   );
 
-  outputTempDir = await mkdtemp(join(dirname(output), '.meow-loader-'));
-  const partialOutput = join(outputTempDir, basename(output));
+  outputTempDir = await mkdtemp(join(dirname(finalOutput.path), '.meow-loader-'));
+  const partialOutput = join(outputTempDir, basename(finalOutput.path));
 
   console.log(`\nMerging ${formatBytes(result.totalBytes)} into MP4...`);
   try {
     await mergeToMp4(result.segmentPaths, partialOutput);
     console.log('Verifying output...');
     await validateMp4Output(partialOutput, expectedDuration);
-    await assertOutputAvailable(output, args.force);
-    await replaceFile(partialOutput, output);
+    await assertOutputAvailable(finalOutput.path, args.force);
+    await replaceFile(partialOutput, finalOutput.path);
   } catch (error) {
     throw new Error(
-      `Failed to finalize output: ${errorMessage(error)}\nSegments preserved at: ${tmpDir}`,
+      `Failed to finalize output: ${errorMessage(error)}\nSegments preserved at: ${tmpDir}\nResume later with: --resume ${tmpDir}`,
     );
   } finally {
     await rm(outputTempDir, { recursive: true, force: true }).catch(() => {});
@@ -691,7 +696,7 @@ async function main(): Promise<void> {
     console.warn(`Warning: failed to clean up ${tmpDir}: ${errorMessage(error)}`);
   }
 
-  console.log(`Done! Saved to: ${output}`);
+  console.log(`Done! Saved to: ${finalOutput.path}`);
   if (!ownsTempDir && !args.cleanup) {
     console.log(`Segments kept at: ${tmpDir}`);
   }
