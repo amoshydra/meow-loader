@@ -467,6 +467,16 @@ function resolveManifestUrl(uri: string, baseUrl: string): string {
   }
 }
 
+function assertPlaylistBody(text: string): void {
+  const head = text.replace(/^\uFEFF/, '').trimStart();
+  if (!head.startsWith('<')) {
+    return;
+  }
+  throw new Error(
+    'The URL returned an HTML page instead of an M3U8 playlist. In the browser Network tab, copy the .m3u8 (or media) request instead of the page URL.',
+  );
+}
+
 function estimateBytes(bandwidth: number, duration: number): number | undefined {
   if (!Number.isFinite(bandwidth) || bandwidth <= 0 || !Number.isFinite(duration) || duration <= 0) {
     return undefined;
@@ -518,7 +528,9 @@ async function main(): Promise<void> {
   }
 
   const masterUrl = response.url || url;
-  let playlist = parseM3U8(await readResponseText(response, DEFAULT_PLAYLIST_MAX_BYTES));
+  const playlistBody = await readResponseText(response, DEFAULT_PLAYLIST_MAX_BYTES);
+  assertPlaylistBody(playlistBody);
+  let playlist = parseM3U8(playlistBody);
   let playlistUrl = masterUrl;
   let selectedVariant: M3U8Variant | undefined;
 
@@ -555,7 +567,9 @@ async function main(): Promise<void> {
     }
 
     playlistUrl = variantResponse.url || playlistUrl;
-    playlist = parseM3U8(await readResponseText(variantResponse, DEFAULT_PLAYLIST_MAX_BYTES));
+    const variantBody = await readResponseText(variantResponse, DEFAULT_PLAYLIST_MAX_BYTES);
+    assertPlaylistBody(variantBody);
+    playlist = parseM3U8(variantBody);
   } else if (variantArg !== undefined) {
     throw new Error('variant-index can only be used with a master playlist');
   }

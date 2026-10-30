@@ -127,6 +127,23 @@ describe.skipIf(!canRun)('CLI end-to-end', () => {
         return;
       }
 
+      if (pathname === '/curl.m3u8') {
+        if (request.headers.cookie !== 'session=abc123' || request.headers.pragma !== 'no-cache') {
+          response.writeHead(403);
+          response.end('missing cookie or pragma');
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'application/vnd.apple.mpegurl' });
+        response.end(mediaPlaylist);
+        return;
+      }
+
+      if (pathname === '/page') {
+        response.writeHead(200, { 'content-type': 'text/html' });
+        response.end('<!doctype html><html><body>player</body></html>');
+        return;
+      }
+
       if (pathname === '/query-master.m3u8') {
         response.writeHead(200, { 'content-type': 'application/vnd.apple.mpegurl' });
         response.end(queryMasterPlaylist);
@@ -249,6 +266,36 @@ describe.skipIf(!canRun)('CLI end-to-end', () => {
     expect(stdout).toContain('Done! Saved to');
     expect((await readFile(output)).byteLength).toBeGreaterThan(0);
     expect(segmentRequests).toHaveLength(3);
+  });
+
+  it('downloads from a pasted Copy as cURL command', async () => {
+    segmentRequests = [];
+    const output = join(tempRoot, 'curl.mp4');
+
+    const { stdout } = await command([
+      'curl',
+      `${baseUrl}/curl.m3u8`,
+      '-H',
+      'Pragma: no-cache',
+      '-H',
+      'Connection: keep-alive',
+      '-b',
+      'session=abc123',
+      '--compressed',
+      '-o',
+      output,
+    ]);
+
+    expect(stdout).toContain('Done! Saved to');
+    expect((await readFile(output)).byteLength).toBeGreaterThan(0);
+    expect(segmentRequests).toHaveLength(3);
+  });
+
+  it('explains that an HTML page is not a playlist', async () => {
+    const error = await command([`${baseUrl}/page`]).catch(error => error);
+
+    expect(error.code).toBe(1);
+    expect(error.stderr).toContain('HTML page instead of an M3U8 playlist');
   });
 
   it('prints playlist information without downloading in --dry-run mode', async () => {

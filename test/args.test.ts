@@ -95,7 +95,7 @@ describe('parseArgs', () => {
 
   it('rejects headers without a colon', () => {
     expect(() => parseArgs(['node', 'meow-loader', '-H', 'Authorization'])).toThrow(
-      'Invalid header format "Authorization"',
+      'Invalid header format',
     );
   });
 

@@ -57,6 +57,9 @@ npx meow-loader https://example.com/stream.m3u8 --resume /tmp/meow-abc123 --clea
 
 # Overwrite an existing output file
 npx meow-loader https://example.com/stream.m3u8 my-video.mp4 --force
+
+# Paste a browser "Copy as cURL" command directly
+npx meow-loader curl 'https://example.com/stream.m3u8' -H 'Pragma: no-cache'
 ```
 
 ### Authenticated downloads
@@ -79,6 +82,25 @@ npx meow-loader https://media.example.com/stream.m3u8 \
 `--header-origin` is repeatable. Headers are not forwarded across cross-origin redirects unless the target origin is allowed. Signed URLs continue to work without any header configuration.
 
 This matches browser behavior more closely: browsers do not automatically attach an arbitrary `Authorization` header to every host referenced by a playlist. If a host returns 401/403 after headers are withheld, the CLI prints the `--header-origin` hint.
+
+### Copy as cURL
+
+Paste a command from the browser's "Copy as cURL" menu directly after `meow-loader`. The `curl` word must be the first argument:
+
+```bash
+npx meow-loader curl 'https://media.example.com/stream.m3u8' \
+  -H 'Pragma: no-cache' \
+  -H 'Referer: https://example.com/' \
+  -b 'session=abc123'
+```
+
+Supported curl options: `--url`, `-H`/`--header`, `-b`/`--cookie` (a cookie string, not a file), `-A`/`--user-agent`, `-e`/`--referer`, `-o`/`--output`, `-k`/`--insecure`, and the harmless `-L`, `--compressed`, `--http1.1`, `--http2`, `-s`, `-S`. `-k` maps to `--allow-insecure`.
+
+Only GET requests are supported. Options that change the method or send a body (`-X`, `-d`, `--data-raw`, `-F`, `-I`), bypass the URL safety checks (`--resolve`, `--connect-to`, `--proxy`, `-4`, `-6`, `--unix-socket`), or upload files (`-T`) are rejected with an explanation instead of being silently ignored. In this mode `-o` sets the output file and `-f` means curl's `--fail`; use `--force` to overwrite an existing file.
+
+Headers remain scoped to the playlist origin, so a separate CDN host still needs `--header-origin`. For a loopback or LAN URL, add `--allow-private-network`. Use the "Copy as cURL (bash)" variant: Windows `cmd` and PowerShell quoting is not supported.
+
+Copied commands usually contain cookies and other credentials. They end up in shell history unless you prevent it, so treat them as secrets.
 
 ### Private networks and HTTP
 
