@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.0.0](https://github.com/amoshydra/meow-loader/compare/v0.4.4...v1.0.0) (2026-11-15)
+
+
+### Features
+
+* add --audio to select an audio rendition ([8d1ae74](https://github.com/amoshydra/meow-loader/commit/8d1ae74f37e8fc87d2935a13b6bfd1859e273fae))
+* add --concurrency for parallel segment downloads ([f0b1ea4](https://github.com/amoshydra/meow-loader/commit/f0b1ea4b086c2a4aa7f02cc67bb7e93c5fe2b125))
+* add audio language selection and configurable retries/timeouts ([cb568be](https://github.com/amoshydra/meow-loader/commit/cb568beebabf7dd10805c9a1f05f30a14078216e))
+* download sidecar WebVTT subtitles ([6174eb9](https://github.com/amoshydra/meow-loader/commit/6174eb93368efc4dcd9e0451b8cf9c82eb6f590c))
+* support separate audio renditions ([ab862eb](https://github.com/amoshydra/meow-loader/commit/ab862eb5ba4b158a88d2c67e96ee5f728404771e))
+
+
+### Bug Fixes
+
+* reject rendition flags with --merge-only ([b9f663c](https://github.com/amoshydra/meow-loader/commit/b9f663cec04bd3a35a11689959390e2435787e99))
+
+
+### Documentation
+
+* add a supported-inputs table and a quick summary ([ed3c8a9](https://github.com/amoshydra/meow-loader/commit/ed3c8a92975d90e709b0f3a7751bb15485c66673))
+* add an animated terminal demo and social preview ([18ca798](https://github.com/amoshydra/meow-loader/commit/18ca7989c402c2bdc0ddbeeb8324932cce2d52ac))
+* mark cross-platform CI complete in the roadmap ([1ee75e3](https://github.com/amoshydra/meow-loader/commit/1ee75e3616a9850f981902d1aef060eeb0d575e3))
+* polish README wording and tables ([7154aaf](https://github.com/amoshydra/meow-loader/commit/7154aaf09ebd4cea58d5fb8ae0b0b46ad786af54))
+* tighten the README header and add a CI badge ([3736236](https://github.com/amoshydra/meow-loader/commit/37362369385c3957a9c152c9ed3a5750786a8838))
+
+
+### Chores
+
+* **deps:** update vitest to 5 and vite to 8 ([d1ff583](https://github.com/amoshydra/meow-loader/commit/d1ff5831b1fc567f15652a2d2a29e683524866bf))
+* release 1.0.0 ([c735b8a](https://github.com/amoshydra/meow-loader/commit/c735b8ab1b715da825a111830e653527664bf1d3))
+
+
+### CI/CD
+
+* run tests on macOS and Windows ([f05d3fb](https://github.com/amoshydra/meow-loader/commit/f05d3fba5957d551aa334c2772e5bc743ac49663))
+
 ## [0.4.4](https://github.com/amoshydra/meow-loader/compare/v0.4.3...v0.4.4) (2026-11-15)
 
 
