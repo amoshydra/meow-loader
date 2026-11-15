@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.1.0](https://github.com/amoshydra/meow-loader/compare/v1.0.0...v1.1.0) (2026-11-15)
+
+
+### Features
+
+* add resume validation progress and batch metadata writes ([2e33518](https://github.com/amoshydra/meow-loader/commit/2e335188f2bcdcad72df0f9832a9e277dd2baba2))
+* pin validated DNS addresses and add a security policy ([75e6250](https://github.com/amoshydra/meow-loader/commit/75e6250471037f00f0345064827197c2c6f8d126))
+
+
+### Bug Fixes
+
+* detect byte-range overflow without floating-point loss ([6e7fde7](https://github.com/amoshydra/meow-loader/commit/6e7fde784bd14e86dc4fcd005ceadd922670b929))
+* harden redirect header scoping and special-use IPv6 ranges ([422df0d](https://github.com/amoshydra/meow-loader/commit/422df0d0efe8e23aeb73cade668868f521dc2a48))
+* harden subtitle, metadata, and work-dir handling ([afe191f](https://github.com/amoshydra/meow-loader/commit/afe191fa869f6b01770591014a3f6b7a0b8f3954))
+* whitelist ffmpeg protocols and reject overflowing byte ranges ([79851f7](https://github.com/amoshydra/meow-loader/commit/79851f7cfb288be6444aaf6b7d62ec3e0974bae9))
+
 ## [1.0.0](https://github.com/amoshydra/meow-loader/compare/v0.4.4...v1.0.0) (2026-11-15)
 
 
