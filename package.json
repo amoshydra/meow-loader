@@ -47,6 +47,6 @@
     "publint": "^0.3.25",
     "tsdown": "^0.21.9",
     "typescript": "^5",
-    "vitest": "^2.0.0"
+    "vitest": "^4.1.11"
   }
 }
