@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.4](https://github.com/amoshydra/meow-loader/compare/v0.4.3...v0.4.4) (2026-11-15)
+
+
+### Features
+
+* support byte-range HLS playlists ([b1fa51c](https://github.com/amoshydra/meow-loader/commit/b1fa51c58f48a8142435f5f04bbc7107eb2a8443))
+* support fragmented MP4 (fMP4) HLS playlists ([345ac2e](https://github.com/amoshydra/meow-loader/commit/345ac2ed01e8244a2f1c8316885afaa6b078083d))
+
+
+### Bug Fixes
+
+* clear stale characters when redrawing the TTY progress line ([9554940](https://github.com/amoshydra/meow-loader/commit/9554940253bceecf56613339a6cac9ca21bc3503))
+
+
+### Documentation
+
+* add troubleshooting section for common failures ([6803d4e](https://github.com/amoshydra/meow-loader/commit/6803d4e6f78f12db591009e2ebba2f641e81cac5))
+
+
+### CI/CD
+
+* verify the published version is visible on npm ([6bfaa65](https://github.com/amoshydra/meow-loader/commit/6bfaa655654755cd3fc6b6322ff017a59fbfaffc))
+
 ## [0.4.3](https://github.com/amoshydra/meow-loader/compare/v0.4.2...v0.4.3) (2026-11-15)
 
 
