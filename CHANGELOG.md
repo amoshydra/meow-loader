@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/amoshydra/meow-loader/compare/v0.4.2...v0.4.3) (2026-11-15)
+
+
+### Features
+
+* add --merge-only to merge a saved working directory offline ([582c990](https://github.com/amoshydra/meow-loader/commit/582c990b4ee2c9e87f5d371573e9287e9d99e8a9))
+
 ## [0.4.2](https://github.com/amoshydra/meow-loader/compare/v0.4.1...v0.4.2) (2026-10-30)
 
 
