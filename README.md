@@ -305,6 +305,10 @@ segments are hashed with a progress line showing files and bytes checked. The
 same playlist URL is re-fetched and checked; if it has changed, the resume is
 rejected.
 
+CloudFront URLs may use a refreshed JWT access token in the first path
+component when resuming. The playlist path, variant, query, segment list,
+and saved segment hashes must still match.
+
 If the playlist endpoint is gone entirely, merge the saved directory offline:
 
 ```bash

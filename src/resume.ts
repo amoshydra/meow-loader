@@ -106,19 +106,21 @@ export async function initializeResumeState(options: {
   if (metadataInfo) {
     const existing = parseMetadata(await readMetadataFile(metadataPath, metadataInfo), metadataPath);
 
-    if (existing.sourceUrlHash !== expected.sourceUrlHash) {
+    if (existing.sourceUrlHash !== expected.sourceUrlHash && !matchesRefreshedPathToken(
+      existing.sourceUrlHash, existing.sourceDisplay, options.sourceUrl, hashUrlIdentity,
+    )) {
       throw new Error(
         `Resume directory belongs to a different playlist: expected ${existing.sourceDisplay}, received ${expected.sourceDisplay}`,
       );
     }
 
-    assertSameTrack(existing, expected, 'video');
+    assertSameTrack(existing, expected, 'video', options.video.mediaPlaylistUrl);
     expected.segments = existing.segments;
     expected.initSegment = existing.initSegment;
 
     if (expectedAudio) {
       if (existing.audio) {
-        assertSameTrack(existing.audio, expectedAudio, 'audio');
+        assertSameTrack(existing.audio, expectedAudio, 'audio', options.audio!.mediaPlaylistUrl);
         expectedAudio.segments = existing.audio.segments;
         expectedAudio.initSegment = existing.audio.initSegment;
       }
@@ -414,10 +416,13 @@ function assertSameTrack(
   actual: ResumeTrack,
   expected: ResumeTrack,
   kind: 'video' | 'audio',
+  mediaPlaylistUrl: string,
 ): void {
   const playlistLabel = kind === 'audio' ? 'audio playlist' : 'media playlist';
 
-  if (actual.mediaPlaylistUrlHash !== expected.mediaPlaylistUrlHash) {
+  if (actual.mediaPlaylistUrlHash !== expected.mediaPlaylistUrlHash && !matchesRefreshedPathToken(
+    actual.mediaPlaylistUrlHash, actual.mediaPlaylistUrlDisplay, mediaPlaylistUrl, hashUrl,
+  )) {
     throw new Error(
       `Resume directory belongs to a different ${playlistLabel} or variant: expected ${actual.mediaPlaylistUrlDisplay}, received ${expected.mediaPlaylistUrlDisplay}`,
     );
@@ -578,6 +583,49 @@ function fingerprintSegments(segments: M3U8Segment[], map: M3U8Map | undefined):
 
 function hashUrl(url: string): string {
   return hashString(url);
+}
+
+/** Match refreshed CloudFront path tokens without weakening query/variant identity. */
+function matchesRefreshedPathToken(
+  savedHash: string,
+  savedDisplay: string,
+  currentUrl: string,
+  hash: (url: string) => string,
+): boolean {
+  try {
+    const saved = new URL(savedDisplay);
+    const current = new URL(currentUrl);
+    if (saved.origin !== current.origin || !current.hostname.endsWith('.cloudfront.net')) {
+      return false;
+    }
+    const savedParts = saved.pathname.split('/');
+    const currentParts = current.pathname.split('/');
+    if (!isPathToken(savedParts[1]) || !isPathToken(currentParts[1])) {
+      return false;
+    }
+    currentParts[1] = savedParts[1]!;
+    current.pathname = currentParts.join('/');
+    // Reconstruct the old URL and compare its original hash. This also supports
+    // existing metadata, whose display URL omits the query string.
+    return hash(current.href) === savedHash;
+  } catch {
+    return false;
+  }
+}
+
+function isPathToken(value: string | undefined): boolean {
+  if (!value || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) {
+    return false;
+  }
+  try {
+    const parts = value.split('.');
+    const header = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8'));
+    const payload = JSON.parse(Buffer.from(parts[2]!, 'base64url').toString('utf8'));
+    return header?.typ === 'JWT' && header.alg === 'HS256' &&
+      typeof payload?.exp === 'number' && Array.isArray(payload.paths);
+  } catch {
+    return false;
+  }
 }
 
 function hashUrlIdentity(url: string): string {
